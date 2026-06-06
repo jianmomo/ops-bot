@@ -1,0 +1,12 @@
+# ========== 告警规则（Phase 2）==========
+# 当前为占位文件，Phase 2 实现
+
+thresholds:
+  cpu_percent: 85        # CPU 使用率超过此值告警
+  memory_percent: 90     # 内存使用率超过此值告警
+  disk_percent: 85       # 磁盘使用率超过此值告警
+
+check_interval: 300      # 检查间隔（秒）
+
+services_to_monitor: []  # Phase 2：服务存活监控列表
+urls_to_monitor: []      # Phase 2：网站可用性监控列表

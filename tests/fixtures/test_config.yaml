@@ -1,0 +1,31 @@
+allowed_users:
+  telegram:
+    - "100001"
+    - "100002"
+  qq:
+    - "200001"
+
+allowed_services:
+  - nginx
+  - trilium
+
+nodes:
+  vps1:
+    host: "10.0.0.1"
+    port: 9000
+    token: "test-token-vps1"
+    label: "测试节点1"
+    services: [nginx, trilium]
+  vps2:
+    host: "10.0.0.2"
+    port: 9001
+    token: "test-token-vps2"
+    label: "测试节点2"
+    services: []
+
+log_lines: 30
+
+ai:
+  provider: anthropic
+  model: claude-haiku-4-5-20251001
+  max_tokens: 500

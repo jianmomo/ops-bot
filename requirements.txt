@@ -1,0 +1,15 @@
+# Telegram Bot
+python-telegram-bot==20.7
+
+# QQ Bot（OneBot V11 WebSocket 直连，无需 NoneBot2）
+websockets==11.0.3
+
+# HTTP 客户端（调用 VPS Agent + QQ HTTP API）
+httpx==0.25.2
+
+# 配置管理
+PyYAML==6.0.1
+python-dotenv==1.0.1
+
+# AI 调用（仅 ai 命令触发）
+anthropic==0.34.2

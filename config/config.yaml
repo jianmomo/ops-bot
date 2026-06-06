@@ -1,0 +1,35 @@
+# ========== 用户白名单 ==========
+allowed_users:
+  telegram:
+    - "7084377812"        # 替换为你的 Telegram user_id（字符串）
+  qq:
+    - "735417747"        # 替换为你的 QQ 号（字符串）
+
+# ========== 允许重启的服务白名单 ==========
+allowed_services:
+  - xray
+  - hysteria-server
+
+# ========== 目标节点 ==========
+nodes:
+  vps1:
+    host: "45.192.197.182"    # 你的VPS IP
+    port: 9000
+    token: "fd479eb5e9f52d33dadc6968c249c6523136b0cc0aa2e69c174a1a3ee308db14"
+    label: "ACCK_JP_VPS"
+    services: [xray, hysteria-server]
+  vps2:
+    host: "5.6.7.8"
+    port: 9000
+    token: "${VPS2_AGENT_TOKEN}"
+    label: "VPS 2"
+    services: []
+
+# ========== 日志 ==========
+log_lines: 50
+
+# ========== AI（仅 ai 命令使用）==========
+ai:
+  provider: anthropic
+  model: claude-haiku-4-5-20251001
+  max_tokens: 1000

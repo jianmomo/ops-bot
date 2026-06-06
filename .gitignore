@@ -1,0 +1,27 @@
+# 敏感配置
+.env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+
+# 测试
+.pytest_cache/
+.coverage
+
+# 日志
+logs/
+*.log
+
+# IDE
+.vscode/
+.idea/
+
+# Docker
+.dockerignore

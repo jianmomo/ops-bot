@@ -1,0 +1,26 @@
+[Unit]
+Description=Ops Agent - HTTP API for system management
+Documentation=https://github.com/yourname/ops-bot
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/ops-agent
+EnvironmentFile=/etc/ops-agent/.env
+ExecStart=/usr/bin/python3 /opt/ops-agent/main.py
+Restart=always
+RestartSec=10
+
+# 输出到 journald
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=ops-agent
+
+# 资源限制（防止内存泄漏影响宿主机）
+MemoryMax=256M
+MemorySwapMax=0
+
+[Install]
+WantedBy=multi-user.target

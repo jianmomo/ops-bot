@@ -1,0 +1,12 @@
+# HTTP Agent 极简依赖（部署在目标 VPS）
+fastapi==0.111.0
+uvicorn==0.30.1
+
+# 系统信息
+psutil==5.9.8
+
+# Docker 操作
+docker==7.1.0
+
+# 配置
+python-dotenv==1.0.1
