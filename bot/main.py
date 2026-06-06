@@ -102,6 +102,20 @@ async def main() -> None:
             coros.append(_run_guarded(qq.start_polling(), "QQ Bot"))
             log.info("QQ Bot 已就绪，连接目标: %s", qq_ws)
 
+    # ── 告警监控 ────────────────────────────────────────────────────
+    monitor_targets: list[tuple] = []
+    if tg_token:
+        tg_users = [str(u) for u in cfg._data["allowed_users"]["telegram"]]
+        monitor_targets.append((tg, tg_users))
+    if qq_ws and qq_http:
+        qq_users = [str(u) for u in cfg._data["allowed_users"]["qq"]]
+        monitor_targets.append((qq, qq_users))
+
+    if monitor_targets:
+        from bot.monitoring.monitor import AlertMonitor
+        monitor = AlertMonitor(monitor_targets, cfg.nodes)
+        coros.append(_run_guarded(monitor.start(), "AlertMonitor"))
+
     if not coros:
         log.warning("没有可用 Bot（所有 token / URL 均未设置），正常退出")
         return

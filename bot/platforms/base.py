@@ -25,3 +25,10 @@ class MessagePlatform(ABC):
         if len(text) > MAX_MESSAGE_LEN:
             text = text[: MAX_MESSAGE_LEN - len(TRUNCATION_SUFFIX)] + TRUNCATION_SUFFIX
         await self.send_message(chat_id, text)
+
+    async def broadcast(self, text: str, user_ids: list[str]) -> None:
+        """向指定用户列表广播消息（告警推送）。
+        QQ 平台需重写以加 private_ 前缀；Telegram 直接用 user_id 即 chat_id。
+        """
+        for uid in user_ids:
+            await self.reply(uid, text)

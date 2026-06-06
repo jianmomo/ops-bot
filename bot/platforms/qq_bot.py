@@ -66,6 +66,11 @@ class QQPlatform(MessagePlatform):
     def platform_name(self) -> str:
         return "qq"
 
+    async def broadcast(self, text: str, user_ids: list[str]) -> None:
+        """QQ 私聊需要 private_{QQ_ID} 格式"""
+        for uid in user_ids:
+            await self.reply(f"private_{uid}", text)
+
     async def send_message(self, chat_id: str, text: str) -> None:
         """
         chat_id 格式：
