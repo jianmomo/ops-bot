@@ -51,8 +51,23 @@ class TelegramPlatform(MessagePlatform):
     def __init__(self, bot_token: str, router) -> None:
         self._token = bot_token
         self._router = router  # CommandRouter
-        self._app: Application = Application.builder().token(bot_token).build()
+        self._app: Application = self._build_app(bot_token)
         self._setup_handlers()
+
+    @staticmethod
+    def _build_app(token: str) -> Application:
+        # 代理（xray）建立隧道可能需要 >10s；调大所有超时避免 getUpdates 永远失败
+        return (
+            Application.builder()
+            .token(token)
+            .connect_timeout(30.0)
+            .read_timeout(30.0)
+            .write_timeout(30.0)
+            .get_updates_connect_timeout(30.0)
+            .get_updates_read_timeout(30.0)
+            .get_updates_write_timeout(30.0)
+            .build()
+        )
 
     def _setup_handlers(self) -> None:
         # /start 不走权限校验，单独处理
@@ -123,19 +138,19 @@ class TelegramPlatform(MessagePlatform):
             try:
                 logger.info("Telegram Bot 开始 polling...")
                 await self._app.initialize()
-                await self._app.start()
                 await self._app.updater.start_polling(
                     allowed_updates=Update.ALL_TYPES,
-                    drop_pending_updates=True,
+                    drop_pending_updates=False,
                 )
+                await self._app.start()
                 try:
                     await asyncio.Event().wait()  # 阻塞直到外部 cancel
                 except asyncio.CancelledError:
                     logger.info("Telegram Bot 收到停止信号")
                     return
                 finally:
-                    await self._app.updater.stop()
                     await self._app.stop()
+                    await self._app.updater.stop()
                     await self._app.shutdown()
                     logger.info("Telegram Bot 已停止")
                 return  # 正常退出
@@ -154,8 +169,7 @@ class TelegramPlatform(MessagePlatform):
                     await cleanup()
                 except Exception:
                     pass
-            from telegram.ext import Application as _App
-            self._app = _App.builder().token(self._token).build()
+            self._app = self._build_app(self._token)
             self._setup_handlers()
 
             try:
