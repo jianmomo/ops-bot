@@ -2,7 +2,7 @@
 
 部署在树莓派 4B 上，同时支持 Telegram 和 QQ 两个平台，通过 HTTP Agent 管理多台 VPS 服务器。
 
-**核心原则：稳定、轻量、长期运行、低成本。命令路由基于规则，禁止普通命令调用 LLM。**
+**双 Bot 架构：ops-bot 负责规则路由命令（轻量、无 LLM），OpenClaw 负责 AI 分析（@mention 触发）。**
 
 ---
 
@@ -12,28 +12,39 @@
 - **多节点**：统一管理多台 VPS，命令可指定目标节点
 - **权限控制**：用户白名单，平台隔离，拒绝未授权访问
 - **服务管理**：查看状态、容器列表、实时日志、安全重启
-- **AI 按需**：只有 `ai` 前缀命令才调用 LLM，其余全部规则路由
-- **轻量部署**：Bot 跑 Docker，Agent 跑 systemd，无外部数据库依赖
+- **双 Bot 分工**：ops-bot 处理 `/命令`（规则路由，无 LLM），OpenClaw 处理自然语言 AI 分析
+- **轻量部署**：ops-bot 跑 Docker，Agent 跑 systemd，OpenClaw 跑 systemd user service
 
 ---
 
 ## 架构
 
 ```
-Telegram              QQ（OneBot V11）
-    ↓                       ↓
-TG Bot Handler        QQ Bot Handler
-(python-telegram-bot) (websockets 直连)
-         ↓
-   Command Router（规则路由，无 LLM）
-   Permission Manager（用户白名单）
-         ↓
-   Agent Client（httpx HTTP 调度）
-      ↓          ↓
-  VPS 1        VPS 2
-  Agent        Agent
-(FastAPI)    (FastAPI)
+         ┌─── ops-bot（命令 bot）───────────────────────┐
+         │                                              │
+Telegram ─→ TG Bot Handler    QQ Bot Handler ←─ QQ    │
+             (python-tg-bot)   (websockets)            │
+                      ↓                                │
+               Command Router（规则路由，无 LLM）       │
+               Permission Manager（用户白名单）         │
+                      ↓                                │
+               Agent Client（httpx）                   │
+                  ↓        ↓                           │
+              VPS 1      VPS 2                         │
+              Agent      Agent                         │
+            (FastAPI)  (FastAPI)                       │
+         └──────────────────────────────────────────────┘
+
+         ┌─── OpenClaw（AI bot，@mention 触发）──────────┐
+         │                                              │
+Telegram ─→  OpenClaw Gateway（gpt-5.5）               │
+QQ ──────→   + ops-agent Skill                         │
+                      ↓                                │
+               curl → VPS Agent API                    │
+         └──────────────────────────────────────────────┘
 ```
+
+**分工原则**：发 `/status` → ops-bot 响应；`@OpenClaw 帮我分析日志` → OpenClaw 响应。两个 bot 共用同一个 NapCat WS 连接，互不干扰。
 
 ---
 
@@ -96,12 +107,11 @@ make logs
 |------|------|------|
 | `/status` | CPU / 内存 / 磁盘 / 运行时间 | `/status` |
 | `/docker` | 容器列表及状态 | `/docker` |
-| `/log <service>` | 最近 50 行日志 | `/log nginx` |
-| `/restart <service>` | 重启白名单服务 | `/restart trilium` |
+| `/log <service>` | 最近 50 行日志 | `/log xray` |
+| `/restart <service>` | 重启白名单服务 | `/restart hysteria-server` |
 | `/services` | 所有服务运行状态 | `/services` |
-| `ai <内容>` | AI 分析（调用 LLM） | `ai 分析最近日志` |
 
-**可管理的服务**（在 `config.yaml` 中配置）：`nginx` / `trilium` / `x-ui`
+**可管理的服务**（在 `config.yaml` 中配置）：`xray` / `hysteria-server`
 
 ---
 
@@ -119,9 +129,8 @@ allowed_users:
 
 # 允许重启的服务（白名单外的一律拒绝）
 allowed_services:
-  - nginx
-  - trilium
-  - x-ui
+  - xray
+  - hysteria-server
 
 # 目标 VPS 节点
 nodes:
@@ -130,26 +139,19 @@ nodes:
     port: 9000
     token: "${VPS1_AGENT_TOKEN}"   # 引用 .env 中的变量
     label: "主 VPS"
-    services: [nginx, trilium, x-ui]
-
-# AI 配置（仅 ai 命令使用）
-ai:
-  provider: anthropic
-  model: claude-haiku-4-5-20251001
-  max_tokens: 1000
+    services: [xray, hysteria-server]
 ```
 
 ### .env
 
 | 变量 | 说明 |
 |------|------|
-| `TELEGRAM_BOT_TOKEN` | BotFather 颁发的 token |
+| `TELEGRAM_BOT_TOKEN` | ops-bot 的 BotFather token |
 | `QQ_WS_URL` | OneBot 后端 WebSocket 地址，如 `ws://localhost:3001` |
 | `QQ_HTTP_URL` | OneBot 后端 HTTP 地址，如 `http://localhost:3000` |
 | `QQ_ACCESS_TOKEN` | OneBot 后端 access token（未设置则留空） |
 | `VPS1_AGENT_TOKEN` | VPS1 Agent 的认证 token（自定义随机字符串） |
 | `VPS2_AGENT_TOKEN` | VPS2 Agent 的认证 token |
-| `ANTHROPIC_API_KEY` | Anthropic API Key（仅 ai 命令需要） |
 
 ---
 
@@ -218,6 +220,60 @@ if cmd == "/disk":
     from bot.handlers import disk_handler
     return await disk_handler.handle("", node)
 ```
+
+---
+
+## OpenClaw AI 分析
+
+### 双 Bot 架构说明
+
+| | ops-bot | OpenClaw |
+|---|---|---|
+| 触发方式 | `/命令` | `@OpenClaw 自然语言` 或直接 DM |
+| LLM 调用 | 无 | 有（gpt-5.5 等） |
+| VPS 操作 | httpx → Agent API | curl via ops-agent Skill |
+| 平台 | Telegram + QQ | Telegram + QQ（共用 NapCat WS）|
+| 部署方式 | Docker | systemd user service |
+
+### Skill 安装
+
+ops-agent Skill 位于 `openclaw/skills/ops-agent/SKILL.md`，通过 Makefile 一键安装：
+
+```bash
+# 安装所有 Skills 到 OpenClaw 并重启 Gateway
+make install-skills
+
+# 验证安装
+openclaw skills list | grep ops-agent
+```
+
+### OpenClaw 常用命令
+
+```bash
+# 查看 Gateway 状态
+openclaw gateway status
+
+# 查看运行日志
+openclaw logs --tail 50
+
+# 重启 Gateway（修改配置或更新 .env 后执行）
+openclaw gateway restart
+
+# 查看所有 Skills
+openclaw skills list
+
+# 修改 LLM 模型
+openclaw config set agents.defaults.model.primary "openai/模型名"
+openclaw gateway restart
+```
+
+### OpenClaw 配置文件
+
+| 文件 | 说明 |
+|------|------|
+| `~/.openclaw/.env` | API Key、Telegram token、VPS token 等敏感配置 |
+| `~/.openclaw/openclaw.json` | 模型、频道、插件配置 |
+| `~/.openclaw/skills/` | 已安装的 Skills |
 
 ---
 

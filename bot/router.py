@@ -10,7 +10,6 @@ ROUTE_TABLE = [
     ("/log <service>",     "LogHandler"),
     ("/restart <service>", "RestartHandler"),
     ("/services",          "ServicesHandler"),
-    ("ai <query>",         "AIAnalyzer"),
 ]
 
 HELP_TEXT = """\
@@ -19,8 +18,7 @@ HELP_TEXT = """\
   /docker              — 容器列表
   /log <service>       — 最近日志（nginx / trilium / x-ui）
   /restart <service>   — 重启服务（nginx / trilium / x-ui）
-  /services            — 所有服务运行状态
-  ai <内容>            — AI 分析（如：ai 分析最近日志）"""
+  /services            — 所有服务运行状态"""
 
 
 class CommandRouter:
@@ -79,13 +77,6 @@ class CommandRouter:
             from bot.handlers import restart_handler
             return await restart_handler.handle(service, node)
 
-        if cmd.startswith("ai "):
-            query = text[3:].strip()
-            if not query:
-                return "❌ 请输入分析内容，如：ai 分析最近日志"
-            from bot.ai import analyzer
-            return await analyzer.analyze(query, node)
-
         return HELP_TEXT
 
 
@@ -129,9 +120,8 @@ if __name__ == "__main__":
         ("③ /log nginx",           "telegram", "111", "/log nginx",      "vps1"),
         ("④ /restart trilium",     "telegram", "111", "/restart trilium","vps1"),
         ("⑤ /services",            "telegram", "111", "/services",       "vps1"),
-        ("⑥ ai 查询",              "telegram", "111", "ai 分析最近日志", "vps1"),
-        ("⑦ 无权限用户",           "telegram", "999", "/status",         "vps1"),
-        ("⑧ 非法 service",         "telegram", "111", "/log badservice", "vps1"),
+        ("⑥ 无权限用户",           "telegram", "999", "/status",         "vps1"),
+        ("⑦ 非法 service",         "telegram", "111", "/log badservice", "vps1"),
     ]
 
     async def run():

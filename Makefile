@@ -1,4 +1,4 @@
-.PHONY: build up down logs restart deploy-agent
+.PHONY: build up down logs restart deploy-agent install-skills
 
 # ── Docker 操作（树莓派 Bot）──────────────────────────────────────────
 
@@ -18,6 +18,22 @@ logs:
 
 restart:
 	docker compose restart ops-bot
+
+# ── OpenClaw Skills 安装 ─────────────────────────────────────────────
+
+install-skills:
+	@echo "=== 安装 OpenClaw Skills ==="
+	@src="$(CURDIR)/openclaw/skills"; \
+	dst="$$HOME/.openclaw/skills"; \
+	mkdir -p "$$dst"; \
+	for skill_dir in "$$src"/*/; do \
+	    skill_name=$$(basename "$$skill_dir"); \
+	    echo "  复制 $$skill_name → $$dst/$$skill_name"; \
+	    cp -r "$$skill_dir" "$$dst/$$skill_name"; \
+	done
+	@echo "  重启 OpenClaw Gateway..."
+	@openclaw gateway restart
+	@echo "  完成。验证: openclaw skills list | grep ops-agent"
 
 # ── VPS Agent 部署提示 ────────────────────────────────────────────────
 

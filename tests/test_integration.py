@@ -143,15 +143,6 @@ class TestRouter:
         assert "x-ui" in result
         MockCls.assert_not_called()
 
-    # ── ai 命令 → 路由到 AIAnalyzer，不调用 AgentClient ──────────
-    async def test_ai_command_routes_to_analyzer(self, router):
-        with patch("bot.ai.analyzer.analyze",
-                   new=AsyncMock(return_value="🤖 分析结果")) as mock_analyze:
-            result = await router.route("telegram", "100001", "ai 分析最近日志")
-
-        mock_analyze.assert_awaited_once_with("分析最近日志", "vps1")
-        assert result == "🤖 分析结果"
-
     # ── /docker 合法调用 ───────────────────────────────────────────
     async def test_docker_calls_agent(self, router):
         with patch("bot.handlers.docker_handler.AgentClient") as MockCls:
@@ -168,7 +159,7 @@ class TestRouter:
     async def test_unknown_command_returns_help(self, router):
         result = await router.route("telegram", "100001", "/unknowncmd")
         assert "/status" in result
-        assert "ai" in result
+        assert "/services" in result
 
     # ── /log 无服务名 → 友好提示 ──────────────────────────────────
     async def test_log_missing_service(self, router):
