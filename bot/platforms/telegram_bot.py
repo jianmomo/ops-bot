@@ -116,24 +116,53 @@ class TelegramPlatform(MessagePlatform):
     async def start_polling(self) -> None:
         """
         异步协程，供 main.py 的 asyncio.gather() 调用。
-        持续运行直到任务被 cancel（Ctrl+C / SIGTERM）。
+        连接失败（代理未就绪、网络抖动）时每 15 秒重试，CancelledError 时优雅退出。
         """
-        logger.info("Telegram Bot 开始 polling...")
-        await self._app.initialize()
-        await self._app.start()
-        await self._app.updater.start_polling(
-            allowed_updates=Update.ALL_TYPES,
-            drop_pending_updates=True,
-        )
-        try:
-            await asyncio.Event().wait()  # 阻塞直到外部 cancel
-        except asyncio.CancelledError:
-            logger.info("Telegram Bot 收到停止信号")
-        finally:
-            await self._app.updater.stop()
-            await self._app.stop()
-            await self._app.shutdown()
-            logger.info("Telegram Bot 已停止")
+        _RECONNECT_DELAY = 15
+        while True:
+            try:
+                logger.info("Telegram Bot 开始 polling...")
+                await self._app.initialize()
+                await self._app.start()
+                await self._app.updater.start_polling(
+                    allowed_updates=Update.ALL_TYPES,
+                    drop_pending_updates=True,
+                )
+                try:
+                    await asyncio.Event().wait()  # 阻塞直到外部 cancel
+                except asyncio.CancelledError:
+                    logger.info("Telegram Bot 收到停止信号")
+                    return
+                finally:
+                    await self._app.updater.stop()
+                    await self._app.stop()
+                    await self._app.shutdown()
+                    logger.info("Telegram Bot 已停止")
+                return  # 正常退出
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                logger.warning("Telegram Bot 连接失败 (%s)，%d 秒后重试...", e, _RECONNECT_DELAY)
+
+            # 清理残留状态，重建 Application 以便重连
+            for cleanup in (
+                lambda: self._app.updater.stop(),
+                lambda: self._app.stop(),
+                lambda: self._app.shutdown(),
+            ):
+                try:
+                    await cleanup()
+                except Exception:
+                    pass
+            from telegram.ext import Application as _App
+            self._app = _App.builder().token(self._token).build()
+            self._setup_handlers()
+
+            try:
+                await asyncio.sleep(_RECONNECT_DELAY)
+            except asyncio.CancelledError:
+                logger.info("Telegram Bot 重连等待中收到停止信号，退出")
+                return
 
     def run(self) -> None:
         """同步启动方式，用于单独调试"""

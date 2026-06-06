@@ -7,6 +7,13 @@ services:
     container_name: ops-bot
     restart: unless-stopped
     env_file: .env
+    environment:
+      - HTTP_PROXY=
+      - http_proxy=
+      - all_proxy=
+      - ALL_PROXY=
+      - HTTPS_PROXY=http://127.0.0.1:10809
+      - https_proxy=http://127.0.0.1:10809
     volumes:
       - ./config:/app/config:ro   # 生产配置（只读挂载）
       - ./logs:/app/logs           # 日志持久化

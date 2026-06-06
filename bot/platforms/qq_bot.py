@@ -153,12 +153,15 @@ class QQPlatform(MessagePlatform):
         异步协程，供 main.py 的 asyncio.gather() 调用。
         连接失败时每 10 秒重试，CancelledError 时优雅退出。
         """
+        if not self._ws_url:
+            logger.info("QQ_WS_URL 未配置，跳过 QQ Bot 启动")
+            return
         logger.info("QQ Bot 连接 WebSocket: %s", self._ws_url)
         while True:
             try:
                 async with websockets.connect(
                     self._ws_url,
-                    additional_headers=self._headers,
+                    extra_headers=self._headers,
                     ping_interval=30,
                     ping_timeout=10,
                 ) as ws:
