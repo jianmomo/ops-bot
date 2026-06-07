@@ -5,20 +5,25 @@ logger = logging.getLogger(__name__)
 
 # 路由表（仅用于展示，实际匹配逻辑在 route() 中）
 ROUTE_TABLE = [
-    ("/status",            "StatusHandler"),
-    ("/docker",            "DockerHandler"),
-    ("/log <service>",     "LogHandler"),
-    ("/restart <service>", "RestartHandler"),
-    ("/services",          "ServicesHandler"),
+    ("/status [node]",            "StatusHandler"),
+    ("/docker [node]",            "DockerHandler"),
+    ("/services [node]",          "ServicesHandler"),
+    ("/info [node]",              "InfoHandler"),
+    ("/speedtest [node]",         "SpeedtestHandler"),
+    ("/log <service> [node]",     "LogHandler"),
+    ("/restart <service> [node]", "RestartHandler"),
 ]
 
-HELP_TEXT = """\
-📋 可用命令：
-  /status              — 系统状态（CPU/内存/磁盘/运行时间）
-  /docker              — 容器列表
-  /log <service>       — 最近日志（nginx / trilium / x-ui）
-  /restart <service>   — 重启服务（nginx / trilium / x-ui）
-  /services            — 所有服务运行状态"""
+HELP_TEXT = """📋 可用命令（末尾加节点名可切换，默认 vps1）：
+  /status [node]             — 系统状态（CPU/内存/磁盘/运行时间）
+  /docker [node]             — 容器列表
+  /services [node]           — 所有服务运行状态
+  /info [node]               — 节点详细信息
+  /speedtest [node]          — 网络测速
+  /log <service> [node]      — 最近日志
+  /restart <service> [node]  — 重启服务
+
+示例：/status vps2  /log xray vps2  /info vps1"""
 
 
 class CommandRouter:
@@ -30,6 +35,15 @@ class CommandRouter:
         self._denied = DENIED_MSG
         self._cfg = get_config()
 
+    def _parse_node(self, parts: list[str]) -> tuple[list[str], str]:
+        """
+        若最后一个词是已知节点名，弹出它并返回；否则返回默认 vps1。
+        """
+        known = set(self._cfg.nodes.keys())
+        if parts and parts[-1].lower() in known:
+            return parts[:-1], parts[-1].lower()
+        return parts, "vps1"
+
     async def route(
         self, platform: str, user_id: str, text: str, node: str = "vps1"
     ) -> str:
@@ -39,38 +53,58 @@ class CommandRouter:
 
         # ── 2. 预处理 ────────────────────────────────────────────────
         text = text.strip()
-        cmd = text.lower()
+        parts = text.split()
+        cmd = parts[0].lower() if parts else ""
 
         # ── 3. 路由匹配（按顺序，startswith，不用正则）────────────────
 
         if cmd == "/status":
+            _, node = self._parse_node(parts[1:])
             from bot.handlers import status
             return await status.handle("", node)
 
         if cmd == "/docker":
+            _, node = self._parse_node(parts[1:])
             from bot.handlers import docker_handler
             return await docker_handler.handle("", node)
 
         if cmd == "/services":
+            _, node = self._parse_node(parts[1:])
             from bot.handlers import services_handler
             return await services_handler.handle("", node)
 
-        if cmd.startswith("/log"):
-            parts = text.split(maxsplit=1)
-            service = parts[1].lower() if len(parts) > 1 else ""
+        if cmd == "/info":
+            _, node = self._parse_node(parts[1:])
+            try:
+                from bot.handlers import info_handler
+                return await info_handler.handle("", node)
+            except ImportError:
+                return "ℹ️ /info 功能将在后续步骤部署"
+
+        if cmd == "/speedtest":
+            _, node = self._parse_node(parts[1:])
+            try:
+                from bot.handlers import speedtest_handler
+                return await speedtest_handler.handle("", node)
+            except ImportError:
+                return "📶 /speedtest 功能将在后续步骤部署"
+
+        if cmd == "/log":
+            rest, node = self._parse_node(parts[1:])
+            service = rest[0].lower() if rest else ""
             if not service:
-                return "❌ 请指定服务名，如：/log nginx"
+                return "❌ 请指定服务名，如：/log xray"
             if not self._cfg.is_allowed_service(service):
                 available = "/".join(self._cfg.allowed_services)
                 return f"❌ 不支持的服务: {service}，可用: {available}"
             from bot.handlers import log_handler
             return await log_handler.handle(service, node)
 
-        if cmd.startswith("/restart"):
-            parts = text.split(maxsplit=1)
-            service = parts[1].lower() if len(parts) > 1 else ""
+        if cmd == "/restart":
+            rest, node = self._parse_node(parts[1:])
+            service = rest[0].lower() if rest else ""
             if not service:
-                return "❌ 请指定服务名，如：/restart nginx"
+                return "❌ 请指定服务名，如：/restart xray"
             if not self._cfg.is_allowed_service(service):
                 available = "/".join(self._cfg.allowed_services)
                 return f"❌ 不支持的服务: {service}，可用: {available}"

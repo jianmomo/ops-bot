@@ -4,6 +4,7 @@
   - Bearer Token 认证（环境变量 AGENT_TOKEN）
   - 允许操作的服务由 ALLOWED_SERVICES 控制（逗号分隔）
 """
+import asyncio
 import os
 import socket
 import sys
@@ -100,6 +101,31 @@ async def logs(service: str, lines: int = 50, _=Depends(verify_token)):
 async def restart(service: str, _=Depends(verify_token)):
     _check_service(service)
     return handlers.restart_service(service)
+
+
+@app.get("/traffic")
+async def traffic(_=Depends(verify_token)):
+    return handlers.get_traffic()
+
+
+@app.get("/network")
+async def network(_=Depends(verify_token)):
+    # 含 1 秒采样，用线程池执行避免阻塞事件循环
+    loop = asyncio.get_event_loop()
+    try:
+        return await loop.run_in_executor(None, handlers.get_network_speed)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail={"error": str(e), "code": 500})
+
+
+@app.post("/speedtest")
+async def speedtest_route(_=Depends(verify_token)):
+    # 测速耗时 30-60 秒，必须在线程池中运行
+    loop = asyncio.get_event_loop()
+    try:
+        return await loop.run_in_executor(None, handlers.run_speedtest)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail={"error": str(e), "code": 500})
 
 
 # ── 启动入口 ─────────────────────────────────────────────────────────

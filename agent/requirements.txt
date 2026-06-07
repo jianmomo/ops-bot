@@ -10,3 +10,6 @@ docker==7.1.0
 
 # 配置
 python-dotenv==1.0.1
+
+# 网络测速
+speedtest-cli==2.1.3

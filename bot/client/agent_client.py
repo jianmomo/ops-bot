@@ -8,8 +8,9 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
-_DEFAULT_TIMEOUT = 15.0
-_RESTART_TIMEOUT = 30.0
+_DEFAULT_TIMEOUT   = 15.0
+_RESTART_TIMEOUT   = 30.0
+_SPEEDTEST_TIMEOUT = 120.0
 
 
 class AgentClient:
@@ -103,5 +104,29 @@ class AgentClient:
             if d.get("success"):
                 return f"✅ [{self._label}] {service} 重启成功"
             return f"❌ [{self._label}] {service} 重启失败：{d.get('message', '未知错误')}"
+        except Exception as e:
+            return self._err(e)
+
+    async def call_speedtest(self) -> str:
+        try:
+            d = await self._post("/speedtest", timeout=_SPEEDTEST_TIMEOUT)
+            lines = [f"📶 {self._label} 网络测速", "─" * 17]
+
+            ping = d.get("ping_results", {})
+            if ping:
+                lines.append("延迟（三网）：")
+                for key, name in (("telecom", "电信"), ("unicom", "联通"), ("mobile", "移动")):
+                    if key in ping:
+                        lines.append(f"  📡 {name}：{ping[key]}ms")
+
+            lines.append("速度：")
+            dl     = d.get("download_mbps", 0)
+            ul     = d.get("upload_mbps", 0)
+            server = d.get("server", "N/A")
+            lines.append(f"  ⬇️  下载：{dl:.1f} Mbps")
+            lines.append(f"  ⬆️  上传：{ul:.1f} Mbps")
+            lines.append(f"  🌐 测速节点：{server}")
+
+            return "\n".join(lines)
         except Exception as e:
             return self._err(e)

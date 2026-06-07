@@ -1,34 +1,56 @@
-# ========== 用户白名单 ==========
+# ╔══════════════════════════════════════════════════════════╗
+# ║              Personal Ops Bot — 主配置文件               ║
+# ╚══════════════════════════════════════════════════════════╝
+
+# ── 用户白名单 ────────────────────────────────────────────────
+# 只有白名单内的用户才能发送命令
 allowed_users:
   telegram:
-    - "7084377812"        # 替换为你的 Telegram user_id（字符串）
+    - "7084377812"       # Telegram user_id（发送 /start 后在日志里查找）
   qq:
-    - "735417747"        # 替换为你的 QQ 号（字符串）
+    - "735417747"        # QQ 号
 
-# ========== 允许重启的服务白名单 ==========
+# ── 允许重启的服务白名单 ──────────────────────────────────────
+# /restart 命令只能操作此列表内的服务，防止误操作
 allowed_services:
   - xray
   - hysteria-server
+  - nginx
+  - codex
 
-# ========== 目标节点 ==========
+# ── 目标节点 ──────────────────────────────────────────────────
+# 每个节点对应一台 VPS，bot 通过 HTTP Agent API 操作
 nodes:
   vps1:
-    host: "45.192.197.182"    # 你的VPS IP
-    port: 9000
-    token: "fd479eb5e9f52d33dadc6968c249c6523136b0cc0aa2e69c174a1a3ee308db14"
-    label: "ACCK_JP_VPS"
-    services: [xray, hysteria-server]
+    host: "45.192.197.182"    # VPS 公网 IP
+    port: 9000                # Agent 监听端口
+    token: "fd479eb5e9f52d33dadc6968c249c6523136b0cc0aa2e69c174a1a3ee308db14"  # Bearer Token
+    label: "ACCK_JP_VPS"      # 显示名称（用于消息推送）
+    services: [xray, hysteria-server]  # 该节点运行的服务列表
+    # ── 元数据（用于 /info 展示和告警） ──
+    location: "日本 东京"
+    purpose: "主代理节点"
+    expire_date: "2026-12-31"  # 到期日，格式 YYYY-MM-DD；留空则不提醒
+    monthly_traffic_gb: 1000   # 月流量上限（GB），0 表示不限制
+    monthly_reset_day: 1       # 每月几号重置流量统计
+
   vps2:
-    host: "5.6.7.8"
+    host: "173.254.213.77"
     port: 9000
-    token: "${VPS2_AGENT_TOKEN}"
-    label: "VPS 2"
-    services: []
+    token: "c5f3d8923dd8f5e5ae6e558d27cb6873e51ae28e40ac6a3b947def73d2480ab8"
+    label: "dedirock_LA_VPS"
+    services: [nginx, xray, hysteria-server, codex]
+    # ── 元数据 ──
+    location: "美国 洛杉矶"
+    purpose: ""                # 留空则 /info 不显示此行
+    expire_date: ""            # 留空则不推送到期提醒
+    monthly_traffic_gb: 0      # 0 = 不限制，不显示流量行
+    monthly_reset_day: 1
 
-# ========== 日志 ==========
-log_lines: 50
+# ── 日志 ──────────────────────────────────────────────────────
+log_lines: 50   # /log 命令默认返回的日志行数
 
-# ========== AI（仅 ai 命令使用）==========
+# ── AI（预留，当前 AI 功能由 OpenClaw 处理）──────────────────
 ai:
   provider: anthropic
   model: claude-haiku-4-5-20251001
