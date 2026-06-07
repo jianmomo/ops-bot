@@ -1,4 +1,4 @@
-.PHONY: build up down logs restart deploy-agent install-skills
+.PHONY: build up down logs restart deploy-agent install-skills napcat-log napcat-restart
 
 # ── Docker 操作（树莓派 Bot）──────────────────────────────────────────
 
@@ -18,6 +18,14 @@ logs:
 
 restart:
 	docker compose restart ops-bot
+
+# ── NapCat QQ 后端 ───────────────────────────────────────────────────
+
+napcat-log:
+	docker logs napcat -f --tail=50
+
+napcat-restart:
+	docker compose restart napcat
 
 # ── OpenClaw Skills 安装 ─────────────────────────────────────────────
 

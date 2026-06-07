@@ -1,5 +1,5 @@
 """
-QQ Bot — 直接对接 OneBot V11 协议（WebSocket 接收 + HTTP 发送）
+QQ Bot — 直接对接 OneBot V11 协议（WebSocket 收发，单连接）
 不引入 NoneBot2 框架，与现有 asyncio 任务池无缝共存。
 
 后端支持：NapCat / LLOneBot / Lagrange / go-cqhttp
@@ -10,7 +10,6 @@ import logging
 import re
 from typing import Any
 
-import httpx
 import websockets
 from websockets.exceptions import ConnectionClosed
 
@@ -52,13 +51,19 @@ class QQPlatform(MessagePlatform):
 
     def __init__(self, ws_url: str, http_url: str, router, access_token: str = "") -> None:
         self._ws_url = ws_url
-        self._http_url = http_url.rstrip("/")
         self._router = router  # CommandRouter
         self._access_token = access_token
         # Authorization header（OneBot 实现均支持 Bearer token）
         self._headers: dict[str, str] = (
             {"Authorization": f"Bearer {access_token}"} if access_token else {}
         )
+        self._ws = None          # 当前 WebSocket 连接（发消息用）
+        self._ws_lock: asyncio.Lock | None = None
+
+    def _lock(self) -> asyncio.Lock:
+        if self._ws_lock is None:
+            self._ws_lock = asyncio.Lock()
+        return self._ws_lock
 
     # ── MessagePlatform 接口 ────────────────────────────────────────
 
@@ -76,17 +81,19 @@ class QQPlatform(MessagePlatform):
         chat_id 格式：
           "private_<QQ号>"  → 私聊
           "group_<群号>"    → 群聊
+
+        发送走 WebSocket（与接收共用同一条连接），无需 HTTP API。
         """
         for chunk in _split_message(text):
             if chat_id.startswith("private_"):
-                endpoint = "/send_private_msg"
-                payload: dict[str, Any] = {
+                action = "send_private_msg"
+                params: dict[str, Any] = {
                     "user_id": int(chat_id[len("private_"):]),
                     "message": chunk,
                 }
             elif chat_id.startswith("group_"):
-                endpoint = "/send_group_msg"
-                payload = {
+                action = "send_group_msg"
+                params = {
                     "group_id": int(chat_id[len("group_"):]),
                     "message": chunk,
                 }
@@ -95,17 +102,19 @@ class QQPlatform(MessagePlatform):
                 return
 
             try:
-                async with httpx.AsyncClient() as client:
-                    r = await client.post(
-                        f"{self._http_url}{endpoint}",
-                        headers=self._headers,
-                        json=payload,
-                        timeout=10.0,
-                    )
-                    if r.status_code != 200:
-                        logger.warning("QQ HTTP API 返回 %s: %s", r.status_code, r.text[:100])
+                await self._ws_call(action, params, chat_id)
             except Exception:
                 logger.exception("send_message 失败 chat_id=%s", chat_id)
+
+    async def _ws_call(self, action: str, params: dict[str, Any], chat_id: str) -> None:
+        """通过已连接的 WebSocket 调用 OneBot V11 API"""
+        ws = self._ws
+        if ws is None:
+            logger.error("WebSocket 未连接，无法发送 chat_id=%s", chat_id)
+            return
+        payload = json.dumps({"action": action, "params": params})
+        async with self._lock():
+            await ws.send(payload)
 
     async def send_code_block(self, chat_id: str, code: str, lang: str = "") -> None:
         # QQ 不支持 Markdown，降级为带标记的纯文本
@@ -147,9 +156,13 @@ class QQPlatform(MessagePlatform):
             logger.exception("QQ 路由处理异常: user=%s", user_id)
 
     async def _listen(self, ws) -> None:
-        """持续接收 WebSocket 消息"""
-        async for raw in ws:
-            await self._handle_event(raw)
+        """持续接收 WebSocket 消息，同时持有连接引用供发消息使用"""
+        self._ws = ws
+        try:
+            async for raw in ws:
+                await self._handle_event(raw)
+        finally:
+            self._ws = None
 
     # ── 启动（含断线重连）─────────────────────────────────────────
 

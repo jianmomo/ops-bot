@@ -30,7 +30,7 @@ nodes:
     # ── 元数据（用于 /info 展示和告警） ──
     location: "日本 东京"
     purpose: "主代理节点"
-    expire_date: "2026-12-31"  # 到期日，格式 YYYY-MM-DD；留空则不提醒
+    expire_date: "2028-01-11"  # 到期日，格式 YYYY-MM-DD；留空则不提醒
     monthly_traffic_gb: 1000   # 月流量上限（GB），0 表示不限制
     monthly_reset_day: 1       # 每月几号重置流量统计
 
@@ -42,10 +42,10 @@ nodes:
     services: [nginx, xray, hysteria-server, codex]
     # ── 元数据 ──
     location: "美国 洛杉矶"
-    purpose: ""                # 留空则 /info 不显示此行
-    expire_date: ""            # 留空则不推送到期提醒
-    monthly_traffic_gb: 0      # 0 = 不限制，不显示流量行
-    monthly_reset_day: 1
+    purpose: "备用节点"                # 留空则 /info 不显示此行
+    expire_date: "2027-04-26"            # 留空则不推送到期提醒
+    monthly_traffic_gb: 1000      # 0 = 不限制，不显示流量行
+    monthly_reset_day: 27
 
 # ── 日志 ──────────────────────────────────────────────────────
 log_lines: 50   # /log 命令默认返回的日志行数

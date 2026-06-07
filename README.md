@@ -155,30 +155,43 @@ nodes:
 
 ---
 
-## QQ 后端配置（以 NapCat 为例）
+## QQ 机器人配置（NapCat）
 
-1. 在运行 QQ 的机器上安装 NapCat
-2. 配置反向 WebSocket：
-   ```json
-   {
-     "reverseWs": {
-       "enable": true,
-       "url": "ws://RASPI_IP:3001",
-       "token": "your_access_token"
-     },
-     "httpServer": {
-       "enable": true,
-       "port": 3000,
-       "token": "your_access_token"
-     }
-   }
-   ```
-3. 在树莓派 `.env` 中填入：
-   ```
-   QQ_WS_URL=ws://localhost:3001
-   QQ_HTTP_URL=http://localhost:3000
-   QQ_ACCESS_TOKEN=your_access_token
-   ```
+NapCat 作为 OneBot V11 后端，以 Docker 容器方式部署在树莓派上，
+与 ops-bot 共用同一个 `docker-compose.yml`，通过 `network_mode: host` 直连。
+
+### 首次启动
+
+```bash
+# 启动所有服务（含 NapCat）
+make up
+
+# 查看 NapCat 日志
+make napcat-log
+```
+
+### 登录配置
+
+1. 浏览器访问 WebUI：`http://192.168.1.7:6099`
+2. 扫码登录 QQ 账号
+3. 进入 **网络配置** → 启用 **WebSocket 服务端**
+   - Host：`0.0.0.0`
+   - 端口：`3001`
+4. 保存后重启 NapCat，ops-bot 和 OpenClaw 自动连接
+
+### 常用命令
+
+```bash
+make napcat-log      # 实时查看 NapCat 日志
+make napcat-restart  # 重启 NapCat（扫码失效时使用）
+```
+
+### .env 配置
+
+```dotenv
+QQ_WS_URL=ws://localhost:3001
+QQ_ACCESS_TOKEN=                 # NapCat 未设置 token 则留空
+```
 
 ---
 
