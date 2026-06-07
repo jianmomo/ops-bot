@@ -26,6 +26,7 @@ logs/
 # Docker
 .dockerignore
 
-# NapCat（含账号 token，不提交）
+# NapCat（含账号 token 和 QQ 会话数据，不提交）
 napcat/config/
 napcat/log/
+napcat/qq_data/

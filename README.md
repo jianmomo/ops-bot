@@ -6,308 +6,243 @@
 
 ---
 
-## 功能特性
-
-- **双平台**：Telegram Bot + QQ Bot（OneBot V11 直连，无需 NoneBot2）
-- **多节点**：统一管理多台 VPS，命令可指定目标节点
-- **权限控制**：用户白名单，平台隔离，拒绝未授权访问
-- **服务管理**：查看状态、容器列表、实时日志、安全重启
-- **双 Bot 分工**：ops-bot 处理 `/命令`（规则路由，无 LLM），OpenClaw 处理自然语言 AI 分析
-- **轻量部署**：ops-bot 跑 Docker，Agent 跑 systemd，OpenClaw 跑 systemd user service
-
----
-
-## 架构
-
-```
-         ┌─── ops-bot（命令 bot）───────────────────────┐
-         │                                              │
-Telegram ─→ TG Bot Handler    QQ Bot Handler ←─ QQ    │
-             (python-tg-bot)   (websockets)            │
-                      ↓                                │
-               Command Router（规则路由，无 LLM）       │
-               Permission Manager（用户白名单）         │
-                      ↓                                │
-               Agent Client（httpx）                   │
-                  ↓        ↓                           │
-              VPS 1      VPS 2                         │
-              Agent      Agent                         │
-            (FastAPI)  (FastAPI)                       │
-         └──────────────────────────────────────────────┘
-
-         ┌─── OpenClaw（AI bot，@mention 触发）──────────┐
-         │                                              │
-Telegram ─→  OpenClaw Gateway（gpt-5.5）               │
-QQ ──────→   + ops-agent Skill                         │
-                      ↓                                │
-               curl → VPS Agent API                    │
-         └──────────────────────────────────────────────┘
-```
-
-**分工原则**：发 `/status` → ops-bot 响应；`@OpenClaw 帮我分析日志` → OpenClaw 响应。两个 bot 共用同一个 NapCat WS 连接，互不干扰。
-
----
-
 ## 快速开始
 
-### 前置要求
+### 环境要求
 
 | 组件 | 说明 |
 |------|------|
 | 树莓派 4B | Ubuntu 22.04 ARM64，Docker 已安装 |
 | VPS × N | 已有 systemd，Python 3.10+ |
 | Telegram Bot | 从 @BotFather 获取 token |
-| QQ 后端 | NapCat / LLOneBot / Lagrange（任选一） |
+| QQ 后端 | NapCat（本项目已内置 docker-compose 配置）|
 
-### 1. 配置
+---
+
+## 一、首次部署
+
+### 1. 克隆项目
 
 ```bash
-# 克隆项目
-git clone <repo> ops-bot && cd ops-bot
+git clone <repo-url> ops-bot
+cd ops-bot
+```
 
-# 复制并填写密钥
+### 2. 配置环境变量
+
+```bash
 cp .env.example .env
-nano .env          # 填入 TELEGRAM_BOT_TOKEN、QQ_WS_URL 等
+nano .env
+```
 
-# 按需修改主配置（用户白名单、节点 IP、服务列表）
+需要填写的变量：
+
+| 变量 | 说明 | 获取方式 |
+|------|------|----------|
+| `TELEGRAM_BOT_TOKEN` | Telegram Bot token | @BotFather → /newbot |
+| `VPS1_HOST` | VPS1 公网 IP | 服务商控制台 |
+| `VPS2_HOST` | VPS2 公网 IP | 服务商控制台 |
+| `VPS1_AGENT_TOKEN` | VPS1 Agent 认证 token | 自定义随机串，与 VPS 端保持一致 |
+| `VPS2_AGENT_TOKEN` | VPS2 Agent 认证 token | 同上 |
+| `HTTPS_PROXY` | 本机代理（可直连 Telegram 则留空）| 如 `http://127.0.0.1:10809` |
+
+### 3. 配置白名单和节点
+
+```bash
 nano config/config.yaml
 ```
 
-### 2. 在目标 VPS 部署 Agent
+- `allowed_users.telegram` → 填你的 Telegram user_id（发 /start 后在 `make logs` 里找）
+- `allowed_users.qq` → 填你的 QQ 号
+- `nodes.vps1.label` → VPS 显示名称（随意）
+- `nodes.vps1.expire_date` → 到期日，格式 `YYYY-MM-DD`（留空不提醒）
+
+### 4. 在目标 VPS 部署 Agent
 
 ```bash
-# 在本地（树莓派）执行
-scp -r agent/ root@VPS_IP:/opt/ops-agent
+# 上传 agent 目录
+scp -r agent/ root@YOUR_VPS_IP:/opt/ops-agent
 
-# SSH 到 VPS 运行安装脚本
-ssh root@VPS_IP "cd /opt/ops-agent && bash deploy/install.sh"
+# SSH 到 VPS 安装
+ssh root@YOUR_VPS_IP
+cd /opt/ops-agent && bash deploy/install.sh
 
-# 验证
-curl -H "Authorization: Bearer <your_token>" http://VPS_IP:9000/health
+# 验证（将 YOUR_TOKEN 替换为 .env 里的 VPS1_AGENT_TOKEN）
+curl -H "Authorization: Bearer YOUR_TOKEN" http://YOUR_VPS_IP:9000/health
 ```
 
-详细说明见 [agent/deploy/README.md](agent/deploy/README.md)。
+详细说明见 [agent/deploy/README.md](agent/deploy/README.md)
 
-### 3. 在树莓派启动 Bot
+### 5. 启动
 
 ```bash
-# 构建镜像并启动
-make build
-make up
-
-# 查看日志
-make logs
+make build   # 构建镜像（首次或代码修改后执行）
+make up      # 启动所有服务
+make logs    # 查看实时日志
 ```
 
 ---
 
-## 命令参考
+## 二、QQ Bot 配置（NapCat）
+
+NapCat 以 Docker 容器方式运行，与 ops-bot 共用 docker-compose。
+
+### 首次登录
+
+```bash
+make up
+docker logs napcat 2>&1 | grep "WebUi Token"
+```
+
+1. 浏览器访问 `http://树莓派IP:6099`，输入上面获取的 token
+2. 扫码登录 QQ 账号（建议使用专用小号）
+
+### 配置 WebSocket
+
+登录后进入 **网络配置**：
+
+1. 点击「添加」→ 选择「WebSocket 服务端」
+2. 填写：Host `0.0.0.0`，Port `3001`，Token 留空
+3. 保存 → 重启 NapCat
+
+```bash
+make napcat-restart
+make logs   # 看到 "QQ Bot WebSocket 已连接" 即成功
+```
+
+### 会话持久化
+
+QQ 登录状态保存在 `napcat/qq_data/`（已 gitignore），重启容器无需重新扫码。若扫码失效：
+
+```bash
+make napcat-restart
+docker logs napcat 2>&1 | grep "WebUi Token"  # 重新获取 token 后扫码
+```
+
+---
+
+## 三、切换 AI API（make api）
+
+ops-bot 本身不调用 AI；AI 分析由 OpenClaw 处理。`make api` 管理 OpenClaw 使用的 AI 后端。
+
+### 首次配置
+
+```bash
+nano config/api_profiles.yaml
+# 填入 default_api_key 和 default_base_url（中转站地址）
+```
+
+### 日常使用
+
+```bash
+make api
+```
+
+交互菜单说明：
+
+| 选项 | 功能 |
+|------|------|
+| 数字（1-N）| 切换到预设 Profile，自动测试并重启 OpenClaw |
+| `d` | 动态查询中转站所有可用模型，关键词过滤后选择 |
+| `t` | 测试当前配置（连接检测 + 模型对话验证）|
+| `e` | 修改接入点 URL（自动探测 /v1 格式并修正）|
+| `k` | 修改 API Key（修改后自动验证连通性）|
+| `0` | 退出 |
+
+### 新增模型
+
+编辑 `config/api_profiles.yaml`，在 `profiles:` 下添加：
+
+```yaml
+- name: "自定义模型"
+  model: "model-name"   # 中转站文档里的名字
+  provider: "openai"    # 中转站统一用 openai
+```
+
+---
+
+## 四、命令参考
 
 | 命令 | 说明 | 示例 |
 |------|------|------|
-| `/status` | CPU / 内存 / 磁盘 / 运行时间 | `/status` |
+| `/status` | CPU / 内存 / 磁盘 / 运行时间 | `/status vps2` |
+| `/info` | 节点详情 + 流量用量 + 到期倒计时 | `/info vps2` |
 | `/docker` | 容器列表及状态 | `/docker` |
 | `/log <service>` | 最近 50 行日志 | `/log xray` |
-| `/restart <service>` | 重启白名单服务 | `/restart hysteria-server` |
+| `/restart <service>` | 重启白名单内服务 | `/restart hysteria-server` |
 | `/services` | 所有服务运行状态 | `/services` |
+| `/speedtest` | 带宽测速（约 2 分钟）| `/speedtest vps2` |
 
-**可管理的服务**（在 `config.yaml` 中配置）：`xray` / `hysteria-server`
+所有命令均可在末尾加节点名（`vps1` / `vps2`），默认操作 vps1。
 
 ---
 
-## 配置说明
+## 五、常用运维命令
 
-### config/config.yaml
+```bash
+make build          # 重新构建 ops-bot 镜像
+make up             # 启动所有服务（镜像有变更时自动重建容器）
+make down           # 停止所有服务
+make logs           # 实时日志（ops-bot + napcat）
+make restart        # 仅重启 ops-bot
+make napcat-log     # NapCat 实时日志
+make napcat-restart # 重启 NapCat（扫码失效时）
+make install-skills # 安装/更新 OpenClaw Skills
+make api            # 切换 AI API 配置
+make deploy-agent   # 查看 VPS Agent 部署步骤
+```
+
+---
+
+## 六、告警配置
+
+编辑 `config/alerts.yaml`，修改后执行 `make restart` 重载：
 
 ```yaml
-# 用户白名单（str 格式的 ID）
-allowed_users:
-  telegram:
-    - "123456789"   # Telegram user_id（找 @userinfobot 获取）
-  qq:
-    - "987654321"   # QQ 号
+thresholds:
+  cpu_percent: 80      # 超过此值推送告警
+  mem_percent: 80
+  disk_percent: 80
 
-# 允许重启的服务（白名单外的一律拒绝）
-allowed_services:
-  - xray
-  - hysteria-server
+expire_remind_days: [7, 3, 1]   # 到期前几天提醒
+traffic_warn_percent: 80         # 月流量用量超此比例告警
 
-# 目标 VPS 节点
-nodes:
-  vps1:
-    host: "1.2.3.4"
-    port: 9000
-    token: "${VPS1_AGENT_TOKEN}"   # 引用 .env 中的变量
-    label: "主 VPS"
-    services: [xray, hysteria-server]
-```
-
-### .env
-
-| 变量 | 说明 |
-|------|------|
-| `TELEGRAM_BOT_TOKEN` | ops-bot 的 BotFather token |
-| `QQ_WS_URL` | OneBot 后端 WebSocket 地址，如 `ws://localhost:3001` |
-| `QQ_HTTP_URL` | OneBot 后端 HTTP 地址，如 `http://localhost:3000` |
-| `QQ_ACCESS_TOKEN` | OneBot 后端 access token（未设置则留空） |
-| `VPS1_AGENT_TOKEN` | VPS1 Agent 的认证 token（自定义随机字符串） |
-| `VPS2_AGENT_TOKEN` | VPS2 Agent 的认证 token |
-
----
-
-## QQ 机器人配置（NapCat）
-
-NapCat 作为 OneBot V11 后端，以 Docker 容器方式部署在树莓派上，
-与 ops-bot 共用同一个 `docker-compose.yml`，通过 `network_mode: host` 直连。
-
-### 首次启动
-
-```bash
-# 启动所有服务（含 NapCat）
-make up
-
-# 查看 NapCat 日志
-make napcat-log
-```
-
-### 登录配置
-
-1. 浏览器访问 WebUI：`http://192.168.1.7:6099`
-2. 扫码登录 QQ 账号
-3. 进入 **网络配置** → 启用 **WebSocket 服务端**
-   - Host：`0.0.0.0`
-   - 端口：`3001`
-4. 保存后重启 NapCat，ops-bot 和 OpenClaw 自动连接
-
-### 常用命令
-
-```bash
-make napcat-log      # 实时查看 NapCat 日志
-make napcat-restart  # 重启 NapCat（扫码失效时使用）
-```
-
-### .env 配置
-
-```dotenv
-QQ_WS_URL=ws://localhost:3001
-QQ_ACCESS_TOKEN=                 # NapCat 未设置 token 则留空
+websites:
+  interval: 1800      # 检测间隔（秒）
+  sites:
+    - name: "我的网站"
+      url: "https://example.com"
 ```
 
 ---
 
-## 扩展指南 — 添加新命令（5 步）
+## 七、项目结构
 
-以新增 `/disk` 命令为例：
-
-**Step 1** — 在 Agent 添加数据接口（`agent/handlers.py`）：
-```python
-def get_disk_detail() -> dict:
-    ...
 ```
-
-**Step 2** — 在 Agent 添加路由（`agent/main.py`）：
-```python
-@app.get("/disk")
-async def disk(_=Depends(verify_token)):
-    return handlers.get_disk_detail()
-```
-
-**Step 3** — 在 AgentClient 添加调用方法（`bot/client/agent_client.py`）：
-```python
-async def call_disk(self) -> str:
-    data = await self._get("/disk")
-    return f"💾 磁盘详情 [{self._label}]\n..."
-```
-
-**Step 4** — 创建 handler（`bot/handlers/disk_handler.py`）：
-```python
-async def handle(args: str, node: str = "vps1") -> str:
-    from bot.config import get_config
-    from bot.client.agent_client import AgentClient
-    return await AgentClient(get_config().get_node(node)).call_disk()
-```
-
-**Step 5** — 在 Router 注册（`bot/router.py`）：
-```python
-if cmd == "/disk":
-    from bot.handlers import disk_handler
-    return await disk_handler.handle("", node)
+ops-bot/
+├── bot/                   # ops-bot 主服务
+│   ├── handlers/          # 各命令处理器（status/docker/log/restart/info/speedtest）
+│   ├── platforms/         # Telegram / QQ 平台适配
+│   ├── client/            # VPS Agent HTTP 客户端
+│   └── monitoring/        # 告警监控（资源/到期/流量/GFW/网站）
+├── agent/                 # VPS Agent（部署到每台 VPS）
+│   └── deploy/            # 安装脚本和 systemd 服务文件
+├── openclaw/skills/       # OpenClaw AI Skill（ops-agent）
+├── config/
+│   ├── config.yaml        # 主配置（白名单、节点、服务）
+│   └── alerts.yaml        # 告警阈值和监控目标
+├── scripts/
+│   └── switch_api.py      # AI API 切换脚本（make api）
+├── .env.example           # 环境变量模板（复制为 .env 后填写）
+└── docker-compose.yml     # ops-bot + NapCat
 ```
 
 ---
 
-## OpenClaw AI 分析
+## 安全说明
 
-### 双 Bot 架构说明
-
-| | ops-bot | OpenClaw |
-|---|---|---|
-| 触发方式 | `/命令` | `@OpenClaw 自然语言` 或直接 DM |
-| LLM 调用 | 无 | 有（gpt-5.5 等） |
-| VPS 操作 | httpx → Agent API | curl via ops-agent Skill |
-| 平台 | Telegram + QQ | Telegram + QQ（共用 NapCat WS）|
-| 部署方式 | Docker | systemd user service |
-
-### Skill 安装
-
-ops-agent Skill 位于 `openclaw/skills/ops-agent/SKILL.md`，通过 Makefile 一键安装：
-
-```bash
-# 安装所有 Skills 到 OpenClaw 并重启 Gateway
-make install-skills
-
-# 验证安装
-openclaw skills list | grep ops-agent
-```
-
-### OpenClaw 常用命令
-
-```bash
-# 查看 Gateway 状态
-openclaw gateway status
-
-# 查看运行日志
-openclaw logs --tail 50
-
-# 重启 Gateway（修改配置或更新 .env 后执行）
-openclaw gateway restart
-
-# 查看所有 Skills
-openclaw skills list
-
-# 修改 LLM 模型
-openclaw config set agents.defaults.model.primary "openai/模型名"
-openclaw gateway restart
-```
-
-### OpenClaw 配置文件
-
-| 文件 | 说明 |
-|------|------|
-| `~/.openclaw/.env` | API Key、Telegram token、VPS token 等敏感配置 |
-| `~/.openclaw/openclaw.json` | 模型、频道、插件配置 |
-| `~/.openclaw/skills/` | 已安装的 Skills |
-
----
-
-## Phase 2 规划
-
-- [ ] **告警**：CPU / 内存 / 磁盘超阈值时主动推送（`config/alerts.yaml`）
-- [ ] **服务监控**：定期检查服务存活，宕机自动告警
-- [ ] **网站监控**：HTTP 可用性检查，响应时间告警
-- [ ] **AI 增强**：拉取真实日志后交给 LLM 分析，带上下文
-
----
-
-## 开发
-
-```bash
-# 运行测试
-pytest tests/ -v
-
-# 单独运行路由测试
-python3 bot/router.py
-
-# 单独运行权限测试
-python3 bot/permissions.py
-```
+- `.env` 含所有密钥，已 gitignore，**不要提交**
+- `config/config.yaml` 中敏感字段使用 `${VAR}` 引用 `.env`
+- `config/api_profiles.yaml` 含 AI API Key，已 gitignore
+- `napcat/qq_data/` 含 QQ 会话数据，已 gitignore
+- VPS Agent token 生成建议：`openssl rand -hex 32`

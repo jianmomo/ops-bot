@@ -29,10 +29,8 @@ nodes:
 # ── 网站可用性监控 ────────────────────────────────────────────
 websites:
   enabled: true
-  interval: 60
+  interval: 1800
   timeout: 10
   sites:
-    - name: "Trilium"
-      url: "http://173.254.213.77:8080"
-    - name: "VPS面板"
-      url: "http://173.254.213.77:54321"
+    - name: "笔记网站"
+      url: "https://beihai.xyz/"

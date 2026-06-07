@@ -1,4 +1,4 @@
-.PHONY: build up down logs restart deploy-agent install-skills napcat-log napcat-restart
+.PHONY: build up down logs restart deploy-agent install-skills napcat-log napcat-restart api
 
 # ── Docker 操作（树莓派 Bot）──────────────────────────────────────────
 
@@ -42,6 +42,11 @@ install-skills:
 	@echo "  重启 OpenClaw Gateway..."
 	@openclaw gateway restart
 	@echo "  完成。验证: openclaw skills list | grep ops-agent"
+
+# ── AI API 快速切换 ──────────────────────────────────────────────────
+
+api:
+	@python3 scripts/switch_api.py
 
 # ── VPS Agent 部署提示 ────────────────────────────────────────────────
 
